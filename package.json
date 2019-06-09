@@ -1,0 +1,14 @@
+{
+  "name": "xtcontactid",
+  "version": "1.0.0",
+  "description": "Lupus XT1 contact ID server",
+  "main": "xtcontactid.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Tim Hagemann",
+  "license": "ISC",
+  "dependencies": {
+    "pushover-notifications": "^1.2.0"
+  }
+}
