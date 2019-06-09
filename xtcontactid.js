@@ -5,7 +5,8 @@
 // menu and it will inform this server here about all events
 //
 // The current use is to activate / deactivate the home mode in the Synaptics
-// surveillance station using two custom events defined in "Actions"
+// surveillance station using two custom events defined in "Actions". It also 
+// sends some messages via PushOver API to recipients.
 // -------------------------------------------------------------------------------
 
 // --- some packages we need
@@ -14,6 +15,10 @@ var net = require('net');
 var buffer = require('buffer');
 var http = require('http');
 var Push = require( 'pushover-notifications' )
+
+// --- load contact id strings
+
+const contactid_strings = require('./contactid.json')
 
 // --- some constants you might need to change
 
@@ -38,6 +43,10 @@ function LogErr(str)
 	console.error(str);
 }
 
+// -------------------------------------------------------------------------------
+//
+// Send a https command to a REST server. JSON result expected
+//
 // -------------------------------------------------------------------------------
 
 function SendCommand(cmd)
@@ -74,10 +83,11 @@ function SendCommand(cmd)
 
 // -------------------------------------------------------------------------------
 //
-// IN:  Buffer object with the message (except [] and checksum)
-// OUT: The checksum as integer
+// Send a message to PushOver
 //
-// JS port from https://alarmforum.de/archive/index.php/thread-12037.html
+// IN:  e: false -> normal message, true -> high prio
+//		t: Title (string)
+//		m: Message (string)
 //
 // -------------------------------------------------------------------------------
 
@@ -211,7 +221,7 @@ function parseCID(data) {
 		}
 		else
 		{
-			LogErr("Received malformed message " + data + ". Checksums do not match.")
+			LogErr("Received malformed message " + data + ". Checksums do not match. Expected " + expected_cs.toString(16));
 		}
 	}
 	else
@@ -224,7 +234,29 @@ function parseCID(data) {
 
 // -----------------------------------------------------------------------------------
 //
-// Action
+// Open / Close Event
+//
+// -----------------------------------------------------------------------------------
+
+function AlarmCondition(cid)
+{
+	// --- test message: [test 18313100003D504]
+	
+	var e = cid["event"];
+	var s = "ALARM condition detected: " + e + " -> " + contactid_strings[e].Event + " (" + contactid_strings[e].Description + ")"
+	
+	// --- do some logging 
+	
+	LogNormal(s)
+	
+	// --- and send the message
+	
+	SendMessage(true,"Lupus XT1",s);
+}
+
+// -----------------------------------------------------------------------------------
+//
+// Open / Close Event
 //
 // -----------------------------------------------------------------------------------
 
@@ -249,13 +281,15 @@ function OpenClose(ev)
 
 // -----------------------------------------------------------------------------------
 //
-// Action
+// Action Dispatcher 
 //
 // -----------------------------------------------------------------------------------
 
 function action(cid)
 {
 	LogNormal("Decoded Message: " + JSON.stringify(cid))
+	
+	// --- arm / disarm events
 		
 	if ((cid["event"] == "400") || 
 		(cid["event"] == "401") ||
@@ -267,6 +301,41 @@ function action(cid)
 		{
 			OpenClose(cid["qualifier"]);
 		}
+
+	// --- alarm events
+
+	if ((cid["event"] == "101") || 
+		(cid["event"] == "110") ||
+		(cid["event"] == "111") ||
+		(cid["event"] == "112") ||	
+		(cid["event"] == "113") ||
+		(cid["event"] == "114") ||
+		(cid["event"] == "117") ||
+		(cid["event"] == "120") ||
+		(cid["event"] == "122") ||
+		(cid["event"] == "123") ||
+		(cid["event"] == "129") ||
+		(cid["event"] == "130") ||
+		(cid["event"] == "131") ||
+		(cid["event"] == "132") ||
+		(cid["event"] == "133") ||
+		(cid["event"] == "134") ||
+		(cid["event"] == "136") ||
+		(cid["event"] == "137") ||
+		(cid["event"] == "139") ||
+		(cid["event"] == "140") ||
+		(cid["event"] == "141") ||
+		(cid["event"] == "142") ||
+		(cid["event"] == "144") ||
+		(cid["event"] == "145") ||
+		(cid["event"] == "146") ||
+		(cid["event"] == "147") ||
+		(cid["event"] == "150"))
+		{
+			AlarmCondition(cid);
+		}
+		
+	// --- periodic test report
 		
 	if ((cid["event"] == "601") || 
 		(cid["event"] == "602"))
@@ -289,11 +358,6 @@ LogNormal("---- Server staring up ----");
 LogNormal("");
 
 SendMessage(false,"Lupus XT1","Server starting up...")
-
-//SendMessage(true,"Now","Please pling emergency!")
-
-///LogNormal("after send");
-
 
 var server = net.createServer(function(socket) {
 
