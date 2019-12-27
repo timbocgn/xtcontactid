@@ -7,6 +7,32 @@
 // The current use is to activate / deactivate the home mode in the Synaptics
 // surveillance station using two custom events defined in "Actions". It also 
 // sends some messages via PushOver API to recipients.
+// It also will send a message to your MQTT server you could use to provide some 
+// timebased metrics about the status changes.
+//
+// Inspired by https://github.com/schmupu/ioBroker.contactid/
+// Fletcher Sum ported to JS: https://alarmforum.de/archive/index.php/thread-12037.html
+//
+// Copyright (c) 2019 Tim Hagemann / way2.net Services
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+//
 // -------------------------------------------------------------------------------
 
 // --- some packages we need
@@ -15,19 +41,24 @@ var net = require('net');
 var buffer = require('buffer');
 var http = require('http');
 var Push = require( 'pushover-notifications' )
+var mqtt = require('mqtt')
 
 // --- load contact id strings
 
 const contactid_strings = require('./contactid.json')
 
-// --- some constants you might need to change
+// --- some constants you might need to change. Add them to your xtcontactid-config.js file
 
-const PORT = 1234;
+// const PORT 				= 1234;	
+// const ACTIVATE_HOME 		= "http://<your_synology_name>:5000/webapi/entry.cgi?api=SYNO.SurveillanceStation.ExternalEvent&method=\"Trigger\"&version=1&eventId=1&eventName=\"Activate\"&account=\"<user>\"&password=\"<pass>\""
+// const DEACTIVATE_HOME 	= "http://<your_synology_name>:5000/webapi/entry.cgi?api=SYNO.SurveillanceStation.ExternalEvent&method=\"Trigger\"&version=1&eventId=2&eventName=\"Deactivate\"&account=\"<user>\"&password=\"<pass>\""
+// const PUSHOVER_USER		= "<your user>"
+// const PUSHOVER_TOKEN		= "<your token>"
+// const MQTT_SERVER 		= "mqtt://<your_mqtt_server>"
+// const MQTT_TOPIC_STATUS 	= "<base topic>/xt1/status"
+// const MQTT_TOPIC_PING 	= "<base topic>/xt1/ping"
 
-const ACTIVATE_HOME 	= "http://192.168.0.25:5000/webapi/entry.cgi?api=SYNO.SurveillanceStation.ExternalEvent&method=\"Trigger\"&version=1&eventId=1&eventName=\"Activate\"&account=\"homemode\"&password=\"wtuRvkYf4s6vZ9H\""
-const DEACTIVATE_HOME 	= "http://192.168.0.25:5000/webapi/entry.cgi?api=SYNO.SurveillanceStation.ExternalEvent&method=\"Trigger\"&version=1&eventId=2&eventName=\"Deactivate\"&account=\"homemode\"&password=\"wtuRvkYf4s6vZ9H\""
-const PUSHOVER_USER		= "u1ore57jugabe36gdegkcweuz85obu"
-const PUSHOVER_TOKEN	= "aevo8wpw2d6bmaws3q2d637zud2v5h"
+require('./xtcontactid-config.js')
 
 // -------------------------------------------------------------------------------
 
@@ -252,6 +283,10 @@ function AlarmCondition(cid)
 	// --- and send the message
 	
 	SendMessage(true,"Lupus XT1",s);
+	
+	// --- mqtt send
+
+	mqtt_client.publish(MQTT_TOPIC_STATUS,'{ "status": 99 }');
 }
 
 // -----------------------------------------------------------------------------------
@@ -270,12 +305,17 @@ function OpenClose(ev)
 		LogNormal("disarm")
 		SendMessage(false,"Lupus XT1","The alarm has been DISARMed");
 		SendCommand(ACTIVATE_HOME);
+
+		mqtt_client.publish(MQTT_TOPIC_STATUS,'{ "status": 50 }');
 	}
 	else
 	{
 		LogNormal("arm")
 		SendMessage(false,"Lupus XT1","The alarm has been ARMed");
 		SendCommand(DEACTIVATE_HOME);
+
+		mqtt_client.publish(MQTT_TOPIC_STATUS,'{ "status": 10 }');
+
 	}
 }
 
@@ -341,7 +381,10 @@ function action(cid)
 		(cid["event"] == "602"))
 		{
 			LogNormal("Periodic or manual test report")
+
 			SendMessage(false,"Lupus XT1","Periodic or manual test report");
+
+			mqtt_client.publish(MQTT_TOPIC_PING,'{ "ping": 1 }');
 		}
 }
 
@@ -394,9 +437,11 @@ var server = net.createServer(function(socket) {
 
 });
 
+// --- connect to MQTT
+
+mqtt_client  = mqtt.connect(MQTT_SERVER);
+
 // --- and listen on the respective PORT
 
 server.listen(PORT);
-
-
 

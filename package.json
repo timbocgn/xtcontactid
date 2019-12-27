@@ -9,6 +9,7 @@
   "author": "Tim Hagemann",
   "license": "ISC",
   "dependencies": {
+    "mqtt": "^3.0.0",
     "pushover-notifications": "^1.2.0"
   }
 }
